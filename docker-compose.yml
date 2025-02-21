@@ -1,0 +1,10 @@
+services:
+  api:
+    build: .
+    container_name: backend-boti
+    ports:
+      - '8000:8000'
+
+networks:
+  boti-net:
+    external: true
