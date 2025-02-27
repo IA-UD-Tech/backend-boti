@@ -1,3 +1,11 @@
-uvicorn[standard]==0.32.0
-gunicorn==23.0.0
-fastapi[all]==0.115.4
+uvicorn[standard]
+gunicorn
+fastapi[all]
+sqlmodel
+asyncpg
+python-dotenv
+alembic
+sqlalchemy[asyncio]
+supabase
+psycopg2-binary
+asyncpg

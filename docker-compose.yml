@@ -4,7 +4,12 @@ services:
     container_name: backend-boti
     ports:
       - '8000:8000'
+    volumes:
+      - .:/app
+    networks:
+      - supabase_network_orchestrator-boti
 
 networks:
-  boti-net:
+  supabase_network_orchestrator-boti:
+    name: supabase_network_orchestrator-boti
     external: true
