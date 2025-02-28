@@ -18,21 +18,21 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
         return await super().create(client, obj_in=obj_in)
 
     async def get_multi_with_filter(
-        self, client: Client, *, skip: int = 0, limit: int = 100, estado: bool = None
+        self, client: Client, *, skip: int = 0, limit: int = 100, status: bool = None
     ) -> List[User]:
-        if estado is None:
+        if status is None:
             return await self.get_multi(client=client, skip=skip, limit=limit)
         
-        response = client.table(self.table_name).select("*").eq("estado", estado).range(skip, skip + limit - 1).execute()
+        response = client.table(self.table_name).select("*").eq("status", status).range(skip, skip + limit - 1).execute()
         return [User(**item) for item in response.data]
     
     async def update_last_login(self, client: Client, *, user_id: UUID) -> Optional[User]:
         user = await self.get(client=client, id=user_id)
         if user:
-            response = client.table(self.table_name).update({"ultima_conexion": datetime.utcnow().isoformat()}).eq("id", str(user_id)).execute()
+            response = client.table(self.table_name).update({"last_login": datetime.utcnow().isoformat()}).eq("id", str(user_id)).execute()
             if response.data and len(response.data) > 0:
                 return User(**response.data[0])
         return user
 
-# Only pass the model, no need to specify table name separately
+# Create an instance of the CRUDUser class
 user = CRUDUser(User)

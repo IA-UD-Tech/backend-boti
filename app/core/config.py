@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.environ.get("SUPABASE_KEY", "")
     
+    # OpenAI
+    OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
