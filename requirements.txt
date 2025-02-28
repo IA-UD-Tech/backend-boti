@@ -9,3 +9,8 @@ sqlalchemy[asyncio]
 supabase
 psycopg2-binary
 asyncpg
+pytest
+pytest-asyncio 
+pytest-mock 
+httpx
+pytest-cov
