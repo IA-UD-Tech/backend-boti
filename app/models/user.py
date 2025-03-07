@@ -10,6 +10,7 @@ class UserBase(SQLModel):
     email: EmailStr = Field(nullable=False, unique=True)
     name: str = Field(nullable=False)
     status: bool = Field(default=True)
+    avatar_url: Optional[str] = Field(nullable=True)
 
 class UserCreate(UserBase):
     pass
@@ -18,6 +19,7 @@ class UserUpdate(SQLModel):
     email: Optional[EmailStr] = None
     name: Optional[str] = None
     status: Optional[bool] = None
+    avatar_url: Optional[str] = None
     last_login: Optional[datetime] = None
 
 class User(UserBase, table=True):
@@ -36,8 +38,12 @@ class UserRead(BaseModel):
     email: EmailStr
     name: str
     status: bool
+    avatar_url: Optional[str] = None
     created_at: datetime
     last_login: Optional[datetime] = None
     
     class Config:
         from_attributes = True
+
+class UserWithRoles(UserRead):
+    roles: List[str] = []

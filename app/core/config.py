@@ -15,8 +15,9 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: list[str] = ["*"]
     
     # Security
-    SECRET_KEY: str = os.environ.get("SECRET_KEY", "changeme")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 days
+    SECRET_KEY: str = os.environ.get("SECRET_KEY", "changeme_please_this_is_insecure")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days by default
+    JWT_ALGORITHM: str = "HS256"
     
     # Supabase
     SUPABASE_URL: str = os.environ.get("SUPABASE_URL", "")
