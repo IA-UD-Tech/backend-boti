@@ -3,6 +3,12 @@ from uuid import UUID
 from supabase import Client
 from app.models.agent import Agent, AgentCreate, AgentUpdate
 from app.crud.base import CRUDBase
+from typing import Any, Dict, Union
+from uuid import UUID
+from supabase import Client
+
+from app.crud.base import CRUDBase
+from app.models.agent import Agent, AgentCreate, AgentUpdate
 
 class CRUDAgent(CRUDBase[Agent, AgentCreate, AgentUpdate]):
     async def get_by_name(self, client: Client, *, name: str) -> Optional[Agent]:
@@ -43,5 +49,45 @@ class CRUDAgent(CRUDBase[Agent, AgentCreate, AgentUpdate]):
         
         return [Agent(**item) for item in response.data]
 
-# Create an instance of the CRUDAgent class
+    async def get_by_student_email(self, client: Client, *, student_email: str, skip: int = 0, limit: int = 100):
+        """
+        Get all agents a student is subscribed to by email.
+        """
+        response = client.table("agents") \
+            .select("*") \
+            .contains("students", [student_email]) \
+            .range(skip, skip + limit - 1) \
+            .execute()
+
+        return [self.model(**item) for item in response.data]
+    
+    async def get_by_created_by(
+        self, client: Client, *, created_by: UUID, skip: int = 0, limit: int = 100
+    ) -> List[Agent]:
+        """
+        Get agents created by a specific user.
+        """
+        response = client.table("agents") \
+            .select("*") \
+            .eq("created_by", str(created_by)) \
+            .range(skip, skip + limit - 1) \
+            .execute()
+        
+        return [self.model(**item) for item in response.data]
+    
+    async def get_by_student_email(
+        self, client: Client, *, student_email: str, skip: int = 0, limit: int = 100
+    ) -> List[Agent]:
+        """
+        Get all agents a student is subscribed to by email.
+        """
+        response = client.table("agents") \
+            .select("*") \
+            .contains("students", [student_email]) \
+            .range(skip, skip + limit - 1) \
+            .execute()
+        
+        return [self.model(**item) for item in response.data]
+
+# Add this to the agent class instantiation
 agent = CRUDAgent(Agent)

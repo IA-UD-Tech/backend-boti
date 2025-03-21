@@ -1,13 +1,13 @@
-from typing import Any, List, Optional, Dict
+from typing import Any, List, Dict, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, status
 from supabase import Client
 
 from app.api.dependencies.dependencies import get_client
 from app.crud.agent import agent as agent_crud
-from app.crud.agent_configuration import agent_configuration as config_crud
-from app.models.agent import Agent, AgentCreate, AgentRead, AgentUpdate
-from app.models.agent_configuration import AgentConfigurationCreate, AgentConfigurationRead, AgentConfigurationUpdate
+from app.models.agent import Agent, AgentCreate, AgentUpdate, AgentRead
+from app.models.user import User
+from app.api.dependencies.auth import get_current_user
 
 router = APIRouter()
 
@@ -16,43 +16,48 @@ async def create_agent(
     *,
     supabase_client: Client = Depends(get_client),
     agent_in: AgentCreate,
+    current_user: User = Depends(get_current_user)
 ) -> Any:
     """
-    Create new agent.
+    Create a new agent.
     """
+    # Set the created_by field to the current user's ID if not provided
+    if not agent_in.created_by:
+        agent_in.created_by = current_user.id
+        
     agent = await agent_crud.create(supabase_client, obj_in=agent_in)
     return agent
 
 @router.get("/", response_model=List[AgentRead])
 async def read_agents(
+    *,
     supabase_client: Client = Depends(get_client),
     skip: int = 0,
     limit: int = 100,
-    tool_id: Optional[int] = None,
-    agent_type: Optional[str] = None,
+    created_by: Optional[UUID] = None,
+    current_user: User = Depends(get_current_user)
 ) -> Any:
     """
-    Retrieve agents with optional filtering by tool or type.
+    Retrieve agents with optional filtering by creator.
     """
-    if tool_id:
-        agents = await agent_crud.get_by_tool(
-            supabase_client, tool_id=tool_id, skip=skip, limit=limit
-        )
-    elif agent_type:
-        agents = await agent_crud.get_by_type(
-            supabase_client, agent_type=agent_type, skip=skip, limit=limit
+    # If created_by is specified, filter by that user
+    if created_by:
+        agents = await agent_crud.get_by_created_by(
+            supabase_client, created_by=created_by, skip=skip, limit=limit
         )
     else:
         agents = await agent_crud.get_multi(supabase_client, skip=skip, limit=limit)
     return agents
 
 @router.get("/{agent_id}", response_model=AgentRead)
-async def read_agent_by_id(
-    agent_id: UUID,
+async def read_agent(
+    *,
     supabase_client: Client = Depends(get_client),
+    agent_id: UUID,
+    current_user: User = Depends(get_current_user)
 ) -> Any:
     """
-    Get a specific agent by id.
+    Get a specific agent by ID.
     """
     agent = await agent_crud.get(supabase_client, id=agent_id)
     if not agent:
@@ -68,6 +73,7 @@ async def update_agent(
     supabase_client: Client = Depends(get_client),
     agent_id: UUID,
     agent_in: AgentUpdate,
+    current_user: User = Depends(get_current_user)
 ) -> Any:
     """
     Update an agent.
@@ -78,7 +84,12 @@ async def update_agent(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent not found"
         )
-    
+    # Optional: Check if user is allowed to update this agent
+    if str(agent.created_by) != str(current_user.id) and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to update this agent"
+        )
     agent = await agent_crud.update(supabase_client, db_obj=agent, obj_in=agent_in)
     return agent
 
@@ -87,6 +98,7 @@ async def delete_agent(
     *,
     supabase_client: Client = Depends(get_client),
     agent_id: UUID,
+    current_user: User = Depends(get_current_user)
 ) -> Any:
     """
     Delete an agent.
@@ -97,57 +109,25 @@ async def delete_agent(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agent not found"
         )
+    # Optional: Check if user is allowed to delete this agent
+    if str(agent.created_by) != str(current_user.id) and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to delete this agent"
+        )
     agent = await agent_crud.remove(supabase_client, id=agent_id)
     return agent
 
-# Agent Configuration Endpoints
-
-@router.get("/{agent_id}/config", response_model=List[AgentConfigurationRead])
-async def read_agent_config(
-    agent_id: UUID,
-    supabase_client: Client = Depends(get_client),
-) -> Any:
-    """
-    Get all configuration for an agent.
-    """
-    agent = await agent_crud.get(supabase_client, id=agent_id)
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    
-    config = await config_crud.get_by_agent(supabase_client, agent_id=agent_id)
-    return config
-
-@router.get("/{agent_id}/config/dict", response_model=Dict[str, str])
-async def read_agent_config_dict(
-    agent_id: UUID,
-    supabase_client: Client = Depends(get_client),
-) -> Any:
-    """
-    Get all configuration for an agent as a dictionary.
-    """
-    agent = await agent_crud.get(supabase_client, id=agent_id)
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    
-    config_dict = await config_crud.get_config_dict(supabase_client, agent_id=agent_id)
-    return config_dict
-
-@router.post("/{agent_id}/config", response_model=AgentConfigurationRead)
-async def create_agent_config(
+@router.post("/{agent_id}/subscribe", response_model=AgentRead)
+async def subscribe_student_to_agent(
     *,
     supabase_client: Client = Depends(get_client),
     agent_id: UUID,
-    parameter: str,
-    value: str,
+    student_email: str = Body(..., embed=True),
+    current_user: User = Depends(get_current_user)
 ) -> Any:
     """
-    Add a configuration parameter to an agent.
+    Subscribe a student (identified by email) to an agent.
     """
     agent = await agent_crud.get(supabase_client, id=agent_id)
     if not agent:
@@ -156,19 +136,35 @@ async def create_agent_config(
             detail="Agent not found"
         )
     
-    config = AgentConfigurationCreate(agent_id=agent_id, parameter=parameter, value=value)
-    return await config_crud.create(supabase_client, obj_in=config)
+    # Check if user has permission to modify this agent
+    if str(agent.created_by) != str(current_user.id) and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to update this agent"
+        )
+    
+    # Get current list of subscribed students
+    students = agent.students if agent.students else []
+    
+    # Add new student if not already subscribed
+    if student_email not in students:
+        students.append(student_email)
+    
+    # Update the agent with the new student list
+    update_data = AgentUpdate(students=students)
+    updated_agent = await agent_crud.update(supabase_client, db_obj=agent, obj_in=update_data)
+    return updated_agent
 
-@router.put("/{agent_id}/config/{parameter}", response_model=AgentConfigurationRead)
-async def update_agent_config(
+@router.delete("/{agent_id}/unsubscribe", response_model=AgentRead)
+async def unsubscribe_student_from_agent(
     *,
     supabase_client: Client = Depends(get_client),
     agent_id: UUID,
-    parameter: str,
-    value: str,
+    student_email: str = Body(..., embed=True),
+    current_user: User = Depends(get_current_user)
 ) -> Any:
     """
-    Update a configuration parameter for an agent.
+    Unsubscribe a student from an agent.
     """
     agent = await agent_crud.get(supabase_client, id=agent_id)
     if not agent:
@@ -177,66 +173,35 @@ async def update_agent_config(
             detail="Agent not found"
         )
     
-    config = await config_crud.get_by_parameter(
-        supabase_client, agent_id=agent_id, parameter=parameter
+    # Check permissions
+    if str(agent.created_by) != str(current_user.id) and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions to update this agent"
+        )
+    
+    # Remove student from list
+    students = agent.students if agent.students else []
+    if student_email in students:
+        students.remove(student_email)
+    
+    # Update the agent
+    update_data = AgentUpdate(students=students)
+    updated_agent = await agent_crud.update(supabase_client, db_obj=agent, obj_in=update_data)
+    return updated_agent
+
+@router.get("/by-student/{student_email}", response_model=List[AgentRead])
+async def get_agents_by_student(
+    *,
+    supabase_client: Client = Depends(get_client),
+    student_email: str,
+    skip: int = 0, 
+    limit: int = 100
+) -> Any:
+    """
+    Get all agents a student is subscribed to.
+    """
+    agents = await agent_crud.get_by_student_email(
+        supabase_client, student_email=student_email, skip=skip, limit=limit
     )
-    
-    if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Configuration parameter '{parameter}' not found for this agent"
-        )
-    
-    update_data = AgentConfigurationUpdate(value=value)
-    return await config_crud.update(supabase_client, db_obj=config, obj_in=update_data)
-
-@router.patch("/{agent_id}/config/{parameter}", response_model=AgentConfigurationRead)
-async def upsert_agent_config(
-    *,
-    supabase_client: Client = Depends(get_client),
-    agent_id: UUID,
-    parameter: str,
-    value: str,
-) -> Any:
-    """
-    Update a configuration parameter if it exists, or create it if it doesn't.
-    """
-    agent = await agent_crud.get(supabase_client, id=agent_id)
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    
-    return await config_crud.upsert_parameter(
-        supabase_client, agent_id=agent_id, parameter=parameter, value=value
-    )
-
-@router.delete("/{agent_id}/config/{parameter}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_agent_config(
-    *,
-    supabase_client: Client = Depends(get_client),
-    agent_id: UUID,
-    parameter: str,
-):
-    """
-    Delete a configuration parameter from an agent.
-    """
-    agent = await agent_crud.get(supabase_client, id=agent_id)
-    if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Agent not found"
-        )
-    
-    config = await config_crud.get_by_parameter(
-        supabase_client, agent_id=agent_id, parameter=parameter
-    )
-    
-    if not config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Configuration parameter '{parameter}' not found for this agent"
-        )
-    
-    await config_crud.remove(supabase_client, id=config.id)
+    return agents
